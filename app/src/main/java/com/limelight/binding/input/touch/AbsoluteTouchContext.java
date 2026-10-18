@@ -3,6 +3,7 @@ package com.limelight.binding.input.touch;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
+import android.view.ViewConfiguration;
 
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.input.MouseButtonPacket;
@@ -19,27 +20,25 @@ public class AbsoluteTouchContext implements TouchContext {
     private boolean cancelled;
     private boolean confirmedLongPress;
     private boolean confirmedTap;
+    private boolean leftButtonDown;
+    private boolean rightButtonDown;
+    private final int touchSlop;
 
     private final Runnable longPressRunnable = new Runnable() {
         @Override
         public void run() {
-            // This timer should have already expired, but cancel it just in case
-            cancelTapDownTimer();
-
-            // Switch from a left click to a right click after a long press
-            confirmedLongPress = true;
-            if (confirmedTap) {
-                conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_LEFT);
+            if (cancelled || confirmedTap || confirmedLongPress) {
+                return;
             }
+            // A desktop long press is exclusively a right click. Sending a left
+            // click first can activate a taskbar window and change the target.
+            confirmedLongPress = true;
+            updatePosition(lastTouchDownX, lastTouchDownY);
             conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_RIGHT);
-        }
-    };
-
-    private final Runnable tapDownRunnable = new Runnable() {
-        @Override
-        public void run() {
-            // Start our tap
-            tapConfirmed();
+            rightButtonDown = true;
+            // Complete the click while the finger is still held, so Windows can
+            // show its context menu without waiting for the finger to lift.
+            handler.postDelayed(rightButtonUpRunnable, 50);
         }
     };
 
@@ -51,20 +50,22 @@ public class AbsoluteTouchContext implements TouchContext {
     private final Runnable leftButtonUpRunnable = new Runnable() {
         @Override
         public void run() {
-            conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_LEFT);
+            releaseLeftButton();
+        }
+    };
+    private final Runnable rightButtonUpRunnable = new Runnable() {
+        @Override
+        public void run() {
+            releaseRightButton();
         }
     };
 
     private static final int SCROLL_SPEED_FACTOR = 3;
 
     private static final int LONG_PRESS_TIME_THRESHOLD = 650;
-    private static final int LONG_PRESS_DISTANCE_THRESHOLD = 30;
 
     private static final int DOUBLE_TAP_TIME_THRESHOLD = 250;
     private static final int DOUBLE_TAP_DISTANCE_THRESHOLD = 60;
-
-    private static final int TOUCH_DOWN_DEAD_ZONE_TIME_THRESHOLD = 100;
-    private static final int TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD = 20;
 
     public AbsoluteTouchContext(NvConnection conn, int actionIndex, View view)
     {
@@ -72,6 +73,7 @@ public class AbsoluteTouchContext implements TouchContext {
         this.actionIndex = actionIndex;
         this.targetView = view;
         this.handler = new Handler(Looper.getMainLooper());
+        this.touchSlop = ViewConfiguration.get(view.getContext()).getScaledTouchSlop();
     }
 
     @Override
@@ -88,6 +90,13 @@ public class AbsoluteTouchContext implements TouchContext {
             return true;
         }
 
+        if (actionIndex == 0) {
+            handler.removeCallbacks(leftButtonUpRunnable);
+            handler.removeCallbacks(rightButtonUpRunnable);
+            releaseLeftButton();
+            releaseRightButton();
+        }
+
         lastTouchLocationX = lastTouchDownX = eventX;
         lastTouchLocationY = lastTouchDownY = eventY;
         lastTouchDownTime = eventTime;
@@ -95,7 +104,6 @@ public class AbsoluteTouchContext implements TouchContext {
 
         if (actionIndex == 0) {
             // Start the timers
-            startTapDownTimer();
             startLongPressTimer();
         }
 
@@ -127,19 +135,17 @@ public class AbsoluteTouchContext implements TouchContext {
         if (actionIndex == 0) {
             // Cancel the timers
             cancelLongPressTimer();
-            cancelTapDownTimer();
 
             // Raise the mouse buttons that we currently have down
             if (confirmedLongPress) {
-                conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_RIGHT);
+                handler.removeCallbacks(rightButtonUpRunnable);
+                releaseRightButton();
             }
             else if (confirmedTap) {
-                conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_LEFT);
+                releaseLeftButton();
             }
             else {
-                // If we get here, this means that the tap completed within the touch down
-                // deadzone time. We'll need to send the touch down and up events now at the
-                // original touch down position.
+                // A stationary short tap becomes a left click only on release.
                 tapConfirmed();
 
                 // Release the left mouse button in 100ms to allow for apps that use polling
@@ -163,13 +169,18 @@ public class AbsoluteTouchContext implements TouchContext {
         handler.removeCallbacks(longPressRunnable);
     }
 
-    private void startTapDownTimer() {
-        cancelTapDownTimer();
-        handler.postDelayed(tapDownRunnable, TOUCH_DOWN_DEAD_ZONE_TIME_THRESHOLD);
+    private void releaseLeftButton() {
+        if (leftButtonDown) {
+            conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_LEFT);
+            leftButtonDown = false;
+        }
     }
 
-    private void cancelTapDownTimer() {
-        handler.removeCallbacks(tapDownRunnable);
+    private void releaseRightButton() {
+        if (rightButtonDown) {
+            conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_RIGHT);
+            rightButtonDown = false;
+        }
     }
 
     private void tapConfirmed() {
@@ -178,7 +189,6 @@ public class AbsoluteTouchContext implements TouchContext {
         }
 
         confirmedTap = true;
-        cancelTapDownTimer();
 
         // Left button down at original position
         if (lastTouchDownTime - lastTouchUpTime > DOUBLE_TAP_TIME_THRESHOLD ||
@@ -187,6 +197,7 @@ public class AbsoluteTouchContext implements TouchContext {
             updatePosition(lastTouchDownX, lastTouchDownY);
         }
         conn.sendMouseButtonDown(MouseButtonPacket.BUTTON_LEFT);
+        leftButtonDown = true;
     }
 
     @Override
@@ -197,13 +208,13 @@ public class AbsoluteTouchContext implements TouchContext {
         }
 
         if (actionIndex == 0) {
-            if (distanceExceeds(eventX - lastTouchDownX, eventY - lastTouchDownY, LONG_PRESS_DISTANCE_THRESHOLD)) {
-                // Moved too far since touch down. Cancel the long press timer.
-                cancelLongPressTimer();
+            if (confirmedLongPress) {
+                return true;
             }
-
-            // Ignore motion within the deadzone period after touch down
-            if (confirmedTap || distanceExceeds(eventX - lastTouchDownX, eventY - lastTouchDownY, TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD)) {
+            // Movement beyond Android's density-aware slop starts a left drag.
+            // Once dragging starts, it must never turn into a right click.
+            if (confirmedTap || distanceExceeds(eventX - lastTouchDownX, eventY - lastTouchDownY, touchSlop)) {
+                cancelLongPressTimer();
                 tapConfirmed();
                 updatePosition(eventX, eventY);
             }
@@ -224,15 +235,12 @@ public class AbsoluteTouchContext implements TouchContext {
 
         // Cancel the timers
         cancelLongPressTimer();
-        cancelTapDownTimer();
+        handler.removeCallbacks(leftButtonUpRunnable);
+        handler.removeCallbacks(rightButtonUpRunnable);
 
         // Raise the mouse buttons
-        if (confirmedLongPress) {
-            conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_RIGHT);
-        }
-        else if (confirmedTap) {
-            conn.sendMouseButtonUp(MouseButtonPacket.BUTTON_LEFT);
-        }
+        releaseRightButton();
+        releaseLeftButton();
     }
 
     @Override

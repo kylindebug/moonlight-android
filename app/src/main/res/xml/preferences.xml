@@ -10,14 +10,14 @@
             android:summary="@string/summary_resolution_list"
             android:entries="@array/resolution_names"
             android:entryValues="@array/resolution_values"
-            android:defaultValue="1280x720" />
+            android:defaultValue="1920x1080" />
         <ListPreference
             android:key="list_fps"
             android:title="@string/title_fps_list"
             android:summary="@string/summary_fps_list"
             android:entries="@array/fps_names"
             android:entryValues="@array/fps_values"
-            android:defaultValue="60" />
+            android:defaultValue="30" />
         <com.limelight.preferences.SeekBarPreference
             android:key="seekbar_bitrate_kbps"
             android:dialogMessage="@string/summary_seekbar_bitrate"
@@ -133,7 +133,7 @@
             android:key="checkbox_touchscreen_trackpad"
             android:title="@string/title_checkbox_touchscreen_trackpad"
             android:summary="@string/summary_checkbox_touchscreen_trackpad"
-            android:defaultValue="true" />
+            android:defaultValue="false" />
         <CheckBoxPreference
             android:key="checkbox_mouse_nav_buttons"
             android:title="@string/title_checkbox_mouse_nav_buttons"

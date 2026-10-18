@@ -3,6 +3,7 @@ package com.limelight;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.UnknownHostException;
+import java.util.List;
 
 import com.limelight.binding.PlatformBinding;
 import com.limelight.binding.crypto.AndroidCryptoProvider;
@@ -23,6 +24,7 @@ import com.limelight.preferences.StreamSettings;
 import com.limelight.ui.AdapterFragment;
 import com.limelight.ui.AdapterFragmentCallbacks;
 import com.limelight.utils.Dialog;
+import com.limelight.utils.DesktopAppSelector;
 import com.limelight.utils.HelpLauncher;
 import com.limelight.utils.ServerHelper;
 import com.limelight.utils.ShortcutHelper;
@@ -30,6 +32,8 @@ import com.limelight.utils.UiHelper;
 
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.AlertDialog;
+import android.app.ProgressDialog;
 import android.app.Service;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -65,6 +69,9 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
     private ShortcutHelper shortcutHelper;
     private ComputerManagerService.ComputerManagerBinder managerBinder;
     private boolean freezeUpdates, runningPolling, inForeground, completeOnCreateCalled;
+    private int desktopRequest;
+    private ProgressDialog desktopProgress;
+    private static final String DESKTOP_PREFS = "desktop_targets";
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         public void onServiceConnected(ComponentName className, IBinder binder) {
             final ComputerManagerService.ComputerManagerBinder localBinder =
@@ -119,6 +126,7 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
     private final static int FULL_APP_LIST_ID = 9;
     private final static int TEST_NETWORK_ID = 10;
     private final static int GAMESTREAM_EOL_ID = 11;
+    private final static int DESKTOP_TARGET_ID = 12;
 
     private void initializeViews() {
         setContentView(R.layout.activity_pc_view);
@@ -315,6 +323,7 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
         super.onPause();
 
         inForeground = false;
+        cancelDesktopRequest();
         stopComputerUpdates(false);
     }
 
@@ -377,6 +386,7 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
             }
 
             menu.add(Menu.NONE, FULL_APP_LIST_ID, 4, getResources().getString(R.string.pcview_menu_app_list));
+            menu.add(Menu.NONE, DESKTOP_TARGET_ID, 4, getString(R.string.desktop_choose));
         }
 
         menu.add(Menu.NONE, TEST_NETWORK_ID, 5, getResources().getString(R.string.pcview_menu_test_network));
@@ -484,8 +494,8 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
                         }
 
                         if (toastSuccess) {
-                            // Open the app list after a successful pairing attempt
-                            doAppList(computer, true, false);
+                            ComputerDetails paired = managerBinder == null ? null : managerBinder.getComputer(computer.uuid);
+                            doDesktopConnection(paired == null ? computer : paired, false);
                         }
                         else {
                             // Start polling again if we're still in the foreground
@@ -582,6 +592,92 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
         }).start();
     }
 
+    private void cancelDesktopRequest() {
+        ++desktopRequest;
+        if (desktopProgress != null) {
+            desktopProgress.dismiss();
+            desktopProgress = null;
+        }
+    }
+
+    private void doDesktopConnection(final ComputerDetails computer, final boolean chooseTarget) {
+        if (desktopProgress != null) {
+            return;
+        }
+        final ComputerManagerService.ComputerManagerBinder binder = managerBinder;
+        if (binder == null || computer.activeAddress == null) {
+            Toast.makeText(this, R.string.error_manager_not_running, Toast.LENGTH_LONG).show();
+            return;
+        }
+        final int request = ++desktopRequest;
+        desktopProgress = ProgressDialog.show(this, getString(R.string.desktop_connecting),
+                computer.name, true, true, dialog -> cancelDesktopRequest());
+        final int remembered = getSharedPreferences(DESKTOP_PREFS, MODE_PRIVATE).getInt(computer.uuid, 0);
+        new Thread(() -> {
+            try {
+                NvHTTP http = new NvHTTP(ServerHelper.getCurrentAddressFromComputer(computer),
+                        computer.httpsPort, binder.getUniqueId(), computer.serverCert,
+                        PlatformBinding.getCryptoProvider(PcView.this));
+                ComputerDetails current = http.getComputerDetails(true);
+                if (!computer.uuid.equalsIgnoreCase(current.uuid)) {
+                    throw new IOException(getString(R.string.desktop_wrong_host));
+                }
+                if (current.pairState != PairState.PAIRED) {
+                    throw new IOException(getString(R.string.scut_not_paired));
+                }
+                List<NvApp> apps = http.getAppList();
+                apps.removeIf(app -> !app.isInitialized() || app.getAppId() <= 0);
+                NvApp target = chooseTarget ? null : DesktopAppSelector.select(apps, remembered);
+                runOnUiThread(() -> {
+                    if (request != desktopRequest || !inForeground || isFinishing() || isDestroyed()) {
+                        return;
+                    }
+                    cancelDesktopRequest();
+                    if (apps.isEmpty()) {
+                        Dialog.displayDialog(PcView.this, getString(R.string.conn_error_title),
+                                getString(R.string.desktop_no_entries), false);
+                    } else if (target != null) {
+                        connectDesktopTarget(computer, target, current.runningGameId);
+                    } else {
+                        String[] names = new String[apps.size()];
+                        for (int i = 0; i < apps.size(); ++i) {
+                            names[i] = apps.get(i).getAppName();
+                        }
+                        new AlertDialog.Builder(PcView.this)
+                                .setTitle(R.string.desktop_choose)
+                                .setItems(names, (dialog, which) ->
+                                        connectDesktopTarget(computer, apps.get(which), current.runningGameId))
+                                .setNegativeButton(android.R.string.cancel, null).show();
+                    }
+                });
+            } catch (IOException | XmlPullParserException e) {
+                LimeLog.warning("Desktop connection lookup failed: " + e.getClass().getSimpleName());
+                runOnUiThread(() -> {
+                    if (request != desktopRequest || !inForeground || isFinishing() || isDestroyed()) {
+                        return;
+                    }
+                    cancelDesktopRequest();
+                    Dialog.displayDialog(PcView.this, getString(R.string.conn_error_title),
+                            getString(R.string.desktop_lookup_failed, e.getLocalizedMessage()), false);
+                });
+            }
+        }, "DesktopLookup").start();
+    }
+
+    private void connectDesktopTarget(ComputerDetails computer, NvApp target, int runningId) {
+        if (!inForeground || managerBinder == null || isFinishing() || isDestroyed()) {
+            return;
+        }
+        if (runningId != 0 && runningId != target.getAppId()) {
+            Dialog.displayDialog(this, getString(R.string.conn_error_title),
+                    getString(R.string.desktop_other_session), false);
+            return;
+        }
+        getSharedPreferences(DESKTOP_PREFS, MODE_PRIVATE).edit()
+                .putInt(computer.uuid, target.getAppId()).apply();
+        ServerHelper.doStart(this, target, computer, managerBinder);
+    }
+
     private void doAppList(ComputerDetails computer, boolean newlyPaired, boolean showHiddenGames) {
         if (computer.state == ComputerDetails.State.OFFLINE) {
             Toast.makeText(PcView.this, getResources().getString(R.string.error_pc_offline), Toast.LENGTH_SHORT).show();
@@ -638,6 +734,10 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
                 doAppList(computer.details, false, true);
                 return true;
 
+            case DESKTOP_TARGET_ID:
+                doDesktopConnection(computer.details, true);
+                return true;
+
             case RESUME_ID:
                 if (managerBinder == null) {
                     Toast.makeText(PcView.this, getResources().getString(R.string.error_manager_not_running), Toast.LENGTH_LONG).show();
@@ -682,6 +782,7 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
     
     private void removeComputer(ComputerDetails details) {
         managerBinder.removeComputer(details);
+        getSharedPreferences(DESKTOP_PREFS, MODE_PRIVATE).edit().remove(details.uuid).apply();
 
         new DiskAssetLoader(this).deleteAssetsForComputer(details.uuid);
 
@@ -762,7 +863,7 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
                     // Pair an unpaired machine by default
                     doPair(computer.details);
                 } else {
-                    doAppList(computer.details, false, false);
+                    doDesktopConnection(computer.details, false);
                 }
             }
         });

@@ -1,5 +1,29 @@
 # Moonlight Android
 
+## Moonlight Desktop customization
+
+This unofficial v12.2-based desktop client uses the separate Android ID
+`org.moonlightdesktop.client.unofficial` and keeps the original application installed.
+Tap a paired host to connect to its remembered desktop, preferring a unique
+Privacy Desktop entry. Long-press the host to select another default entry or manage
+sessions. A different running session is never ended automatically.
+
+Direct touch is the default: tap for left click, hold for a complete right click,
+or move beyond the touch slop to drag. A hold sends no preliminary left click.
+The initial video profile is 1920x1080 at 30 FPS; settings remain configurable.
+
+Build using JDK21, Android SDK37.2 and NDK29.0.14206865:
+`gradlew.bat :app:testNonRootDebugUnitTest :app:assembleNonRootRelease`.
+Release signing is optional and reads ignored `desktop-signing.properties` keys
+`storeFile`, `storePassword`, `keyAlias`, and `keyPassword`. Keep the private key
+to allow future in-place updates. Signing material must never be committed.
+
+Before publishing changes, review the complete outgoing Git history for credentials
+and identifying data. Keep host names, host addresses, device identifiers, pairing
+state, diagnostic captures, local SDK paths and signing files outside Git. This
+repository contains no preconfigured host or pairing credentials. Each installation
+discovers or adds its own host and completes normal Sunshine pairing.
+
 [![AppVeyor Build Status](https://ci.appveyor.com/api/projects/status/232a8tadrrn8jv0k/branch/master?svg=true)](https://ci.appveyor.com/project/cgutman/moonlight-android/branch/master)
 [![Translation Status](https://hosted.weblate.org/widgets/moonlight/-/moonlight-android/svg-badge.svg)](https://hosted.weblate.org/projects/moonlight/moonlight-android/)
 

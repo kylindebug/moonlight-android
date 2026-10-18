@@ -18,6 +18,19 @@ gen/
 
 # Local configuration file (sdk path, etc)
 local.properties
+desktop-signing.properties
+*.keystore
+*.p12
+*.jks
+*.pfx
+*.pem
+*.key
+.env
+.env.*
+*.log
+captures/
+diagnostics/
+artifacts/
 
 # Windows thumbnail db
 Thumbs.db

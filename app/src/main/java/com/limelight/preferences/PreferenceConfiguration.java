@@ -69,8 +69,8 @@ public class PreferenceConfiguration {
     private static final String GAMEPAD_MOTION_SENSORS_PREF_STRING = "checkbox_gamepad_motion_sensors";
     private static final String GAMEPAD_MOTION_FALLBACK_PREF_STRING = "checkbox_gamepad_motion_fallback";
 
-    static final String DEFAULT_RESOLUTION = "1280x720";
-    static final String DEFAULT_FPS = "60";
+    static final String DEFAULT_RESOLUTION = "1920x1080";
+    static final String DEFAULT_FPS = "30";
     private static final boolean DEFAULT_STRETCH = false;
     private static final boolean DEFAULT_SOPS = true;
     private static final boolean DEFAULT_DISABLE_TOASTS = false;
@@ -97,7 +97,7 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_VIBRATE_FALLBACK = false;
     private static final int DEFAULT_VIBRATE_FALLBACK_STRENGTH = 100;
     private static final boolean DEFAULT_FLIP_FACE_BUTTONS = false;
-    private static final boolean DEFAULT_TOUCHSCREEN_TRACKPAD = true;
+    private static final boolean DEFAULT_TOUCHSCREEN_TRACKPAD = false;
     private static final String DEFAULT_AUDIO_CONFIG = "2"; // Stereo
     private static final boolean DEFAULT_LATENCY_TOAST = false;
     private static final String DEFAULT_FRAME_PACING = "latency";

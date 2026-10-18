@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="desktop_connecting">正在连接桌面</string>
+    <string name="desktop_choose">选择默认桌面入口</string>
+    <string name="desktop_wrong_host">响应的主机与所选电脑不一致。</string>
+    <string name="desktop_no_entries">主机没有可连接的桌面入口，请先在 Sunshine 添加桌面。</string>
+    <string name="desktop_lookup_failed">无法读取桌面入口：%1$s</string>
+    <string name="desktop_other_session">主机正在运行其他会话，请先结束该会话再连接桌面。长按电脑图标可管理会话。</string>
     <!-- Shortcut strings -->
     <string name="scut_deleted_pc"> 电脑已删除 </string>
     <string name="scut_not_paired"> 电脑未配对 </string>

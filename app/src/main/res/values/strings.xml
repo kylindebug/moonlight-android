@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="desktop_connecting">Connecting to desktop</string>
+    <string name="desktop_choose">Choose desktop entry</string>
+    <string name="desktop_wrong_host">The responding host does not match this computer.</string>
+    <string name="desktop_no_entries">This host has no desktop entry. Add a desktop in Sunshine first.</string>
+    <string name="desktop_lookup_failed">Unable to read desktop entries: %1$s</string>
+    <string name="desktop_other_session">Another session is running on the host. End it first, then connect to the desktop. Long-press the computer to manage sessions.</string>
     <!-- Shortcut strings -->
     <string name="scut_deleted_pc">PC deleted</string>
     <string name="scut_not_paired">PC not paired</string>

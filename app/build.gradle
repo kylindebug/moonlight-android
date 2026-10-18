@@ -1,9 +1,17 @@
 apply plugin: 'com.android.application'
 
+def desktopSigningFile = rootProject.file('desktop-signing.properties')
+def desktopSigning = new Properties()
+if (desktopSigningFile.exists()) {
+    desktopSigningFile.withInputStream { desktopSigning.load(it) }
+}
+
 android {
     ndkVersion "29.0.14206865"
 
-    compileSdk 37
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
 
     namespace 'com.limelight'
 
@@ -11,8 +19,8 @@ android {
         minSdk 21
         targetSdk 36
 
-        versionName "12.2"
-        versionCode = 315
+        versionName "12.2-desktop.1"
+        versionCode = 31501
 
         // Generate native debug symbols to allow Google Play to symbolicate our native crashes
         ndk.debugSymbolLevel = 'FULL'
@@ -37,7 +45,7 @@ android {
                 }
             }
 
-            applicationId "com.limelight.root"
+            applicationId "org.moonlightdesktop.client.root"
             dimension "root"
             buildConfigField "boolean", "ROOT_BUILD", "true"
         }
@@ -49,7 +57,7 @@ android {
                 }
             }
 
-            applicationId "com.limelight"
+            applicationId "org.moonlightdesktop.client"
             dimension "root"
             buildConfigField "boolean", "ROOT_BUILD", "false"
         }
@@ -81,13 +89,27 @@ android {
         }
     }
 
+    signingConfigs {
+        desktopRelease {
+            if (desktopSigningFile.exists()) {
+                storeFile = file(desktopSigning.getProperty('storeFile'))
+                storePassword = desktopSigning.getProperty('storePassword')
+                keyAlias = desktopSigning.getProperty('keyAlias')
+                keyPassword = desktopSigning.getProperty('keyPassword')
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix ".debug"
-            resValue "string", "app_label", "Moonlight (Debug)"
+            resValue "string", "app_label", "Moonlight 桌面测试"
             resValue "string", "app_label_root", "Moonlight (Root Debug)"
         }
         release {
+            if (desktopSigningFile.exists()) {
+                signingConfig = signingConfigs.getByName('desktopRelease')
+            }
             // To whomever is releasing/using an APK in release mode with
             // Moonlight's official application ID, please stop. I see every
             // single one of your crashes in my Play Console and it makes
@@ -119,7 +141,7 @@ android {
             //
             // TL;DR: Leave the following line alone!
             applicationIdSuffix ".unofficial"
-            resValue "string", "app_label", "Moonlight"
+            resValue "string", "app_label", "Moonlight 桌面"
             resValue "string", "app_label_root", "Moonlight (Root)"
 
             minifyEnabled true
@@ -139,9 +161,16 @@ android {
             excludes += '/META-INF/*.md'
         }
     }
+
+    testOptions {
+        unitTests.includeAndroidResources = true
+    }
 }
 
 dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.16.1'
+    testImplementation 'org.mockito:mockito-core:5.20.0'
     implementation 'org.bouncycastle:bcprov-jdk18on:1.85.2'
     implementation 'org.bouncycastle:bcpkix-jdk18on:1.85'
     implementation 'org.jcodec:jcodec:0.2.5'
