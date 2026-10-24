@@ -9,6 +9,7 @@ import android.view.InputDevice;
 import android.view.KeyEvent;
 
 import java.util.Arrays;
+import java.util.function.IntConsumer;
 
 /**
  * Class to translate a Android key code into the codes GFE is expecting
@@ -47,7 +48,7 @@ public class KeyboardTranslator implements InputManager.InputDeviceListener {
     public static final int VK_SEMICOLON = 59;
     public static final int VK_SLASH = 47;
     public static final int VK_SPACE = 32;
-    public static final int VK_PRINTSCREEN = 154;
+    public static final int VK_PRINTSCREEN = 0x2C;
     public static final int VK_TAB = 9;
     public static final int VK_LEFT = 37;
     public static final int VK_RIGHT = 39;
@@ -94,8 +95,14 @@ public class KeyboardTranslator implements InputManager.InputDeviceListener {
     }
 
     private final SparseArray<KeyboardMapping> keyboardMappings = new SparseArray<>();
+    private final IntConsumer deviceRemoved;
 
     public KeyboardTranslator() {
+        this(deviceId -> {});
+    }
+
+    public KeyboardTranslator(IntConsumer deviceRemoved) {
+        this.deviceRemoved = deviceRemoved;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             for (int deviceId : InputDevice.getDeviceIds()) {
                 InputDevice device = InputDevice.getDevice(deviceId);
@@ -207,6 +214,9 @@ public class KeyboardTranslator implements InputManager.InputDeviceListener {
                 break;
                 
             case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                // The current protocol carries a VK, without a keypad-location field.
+                // Both Enter keys must remain compatible with existing hosts.
                 translated = 0x0d;
                 break;
 
@@ -361,7 +371,7 @@ public class KeyboardTranslator implements InputManager.InputDeviceListener {
                 break;
 
             case KeyEvent.KEYCODE_SCREENSHOT:
-                translated = 0x2C;
+                translated = VK_PRINTSCREEN;
                 break;
 
             default:
@@ -385,6 +395,7 @@ public class KeyboardTranslator implements InputManager.InputDeviceListener {
     @Override
     public void onInputDeviceRemoved(int index) {
         keyboardMappings.remove(index);
+        deviceRemoved.accept(index);
     }
 
     @Override
